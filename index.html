@@ -114,8 +114,23 @@ color:#fff;border:0;border-radius:7px}
   </section>
 
   <section id="tab-stat" class="hide">
+    <h2>投資可能金額</h2>
+    <label for="cap">スイング資金（円）</label>
+    <input id="cap" class="big" inputmode="numeric">
+    <label for="rsk">リスク率（%）</label>
+    <input id="rsk" class="big" inputmode="decimal">
+    <label for="rsn">変更の理由（任意・記録に残ります）</label>
+    <input id="rsn" type="text" placeholder="入金 / 出金 / 見直し など">
+    <button class="btn" id="csave">保存して判定を作り直す</button>
+    <div id="cres"></div>
+    <p class="muted" style="margin-top:12px">
+      資金を変えると1Rと株数が変わるため、最新日の候補と買値候補を自動で計算し直します。<br>
+      集中度80%と判定下限20件は<b>ルール</b>なので、ここでは変更できません（§9のL3手続き）。</p>
+
     <h2>集計</h2>
     <div id="statbox"><div class="empty">読み込み中</div></div>
+    <h2>設定の変更履歴</h2>
+    <div id="loglist"></div>
   </section>
 
   <section id="tab-rec" class="hide">
@@ -445,7 +460,64 @@ color:#fff;border:0;border-radius:7px}
     }).catch(function (e) { crash("集計", e); box.innerHTML = '<div class="err">' + e.message + "</div>"; });
   }
 
-  function load() { loadCandidates(); loadProposals(); loadPlans(); loadStats(); }
+  /* ---------- 投資可能金額 ---------- */
+  function loadSettings() {
+    return Promise.all([
+      api("/rest/v1/settings?select=key,value"),
+      api("/rest/v1/v_settings_log?select=*")
+    ]).then(function (res) {
+      var s = {}; (res[0] || []).forEach(function (r) { s[r.key] = r.value; });
+      $("#cap").value = s.capital || "";
+      $("#rsk").value = s.risk_rate ? (Number(s.risk_rate) * 100).toFixed(1) : "";
+      var lg = res[1] || [];
+      $("#loglist").innerHTML = lg.length
+        ? '<table class="num"><tr><th>日時</th><td>項目</td><td>変更</td></tr>'
+          + lg.map(function (r) {
+              return "<tr><th>" + r.changed_at.slice(0, 16).replace("T", " ") + "</th><td>" + r.key
+                + "</td><td>" + r.old_value + " → " + r.new_value + "</td></tr>"
+                + (r.reason ? '<tr><th></th><td colspan="2" style="text-align:left;color:var(--ink-2);font-size:12.5px">'
+                    + r.reason + "</td></tr>" : "");
+            }).join("") + "</table>"
+        : '<div class="empty">変更はまだありません。</div>';
+    }).catch(function (e) { crash("設定", e); });
+  }
+
+  $("#csave").onclick = function () {
+    var cap = $("#cap").value.replace(/[^0-9.]/g, "");
+    var rsk = $("#rsk").value.replace(/[^0-9.]/g, "");
+    var rsn = $("#rsn").value.replace(/^\s+|\s+$/g, "") || null;
+    if (!cap) { $("#cres").innerHTML = '<div class="err">資金を入力してください。</div>'; return; }
+    var b = $("#csave"); b.disabled = true;
+    $("#cres").innerHTML = "";
+    var jobs = [api("/rest/v1/rpc/set_setting", "POST", { p_key: "capital", p_value: cap, p_reason: rsn })];
+    if (rsk) { jobs.push(api("/rest/v1/rpc/set_setting", "POST",
+      { p_key: "risk_rate", p_value: String(Number(rsk) / 100), p_reason: rsn })); }
+    Promise.all(jobs).then(function (rs) {
+      b.disabled = false;
+      var errs = rs.filter(function (d) { return d && d.error; });
+      if (errs.length) {
+        $("#cres").innerHTML = '<div class="verdict ng"><h3>変更できませんでした</h3>'
+          + errs.map(function (d) { return "<p class=\"muted\" style=\"margin:0\">" + d.error + "</p>"; }).join("")
+          + "</div>";
+        return;
+      }
+      var moved = rs.filter(function (d) { return d && d.changed; });
+      if (!moved.length) { $("#cres").innerHTML = '<div class="muted">変更はありませんでした。</div>'; return; }
+      var rp = moved[0].replanned || {};
+      $("#cres").innerHTML = '<div class="verdict ok"><h3>保存しました</h3>'
+        + '<table class="num">'
+        + moved.map(function (d) {
+            return "<tr><th>" + d.key + "</th><td>" + d.old + " → " + d.new + "</td></tr>";
+          }).join("")
+        + (rp.run_date ? "<tr><th>再計算</th><td>" + rp.run_date + "　候補" + rp.candidates
+            + "件／買値候補" + rp.proposals + "件</td></tr>" : "")
+        + "</table></div>";
+      $("#rsn").value = "";
+      loadSettings(); loadCandidates(); loadProposals(); loadStats();
+    }).catch(function (e) { b.disabled = false; $("#cres").innerHTML = '<div class="err">' + e.message + "</div>"; });
+  };
+
+  function load() { loadCandidates(); loadProposals(); loadPlans(); loadStats(); loadSettings(); }
 
   var saved = null;
   try { saved = localStorage.getItem("gem_tok"); } catch (e) {}
