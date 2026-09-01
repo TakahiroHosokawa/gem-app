@@ -117,6 +117,7 @@ color:#fff;border:0;border-radius:7px}
     <p class="muted">Lv1・スイングロー・損切・利確・買値候補を日足から計算した結果です。
       並びは到達余裕率の浅い順（§3-6）。<b>計算であって見立てではありません。</b>
       スイングローが妥当かはチャートで確かめてください。</p>
+    <div id="gates"></div>
     <div id="planlist"><div class="empty">読み込み中</div></div>
     <div id="pres"></div>
   </section>
@@ -440,7 +441,7 @@ color:#fff;border:0;border-radius:7px}
         btn.onclick = function () {
           if (!window.confirm("この買値で明日の発注計画を登録します。よろしいですか。")) return;
           btn.disabled = true;
-          api("/rest/v1/rpc/choose_proposal", "POST", { p_proposal_id: Number(btn.getAttribute("data-id")) })
+          api("/rest/v1/rpc/choose_proposal", "POST", { p_proposal_id: Number(btn.getAttribute("data-id")), p_override: null })
             .then(function (d) {
               if (d && d.error) { $("#pres").innerHTML = '<div class="err">' + d.error + "</div>"; btn.disabled = false; return; }
               $("#pres").innerHTML = '<div class="verdict ok"><h3>登録しました</h3>'
@@ -452,6 +453,32 @@ color:#fff;border:0;border-radius:7px}
         };
       });
     }).catch(function (e) { crash("判定", e); box.innerHTML = '<div class="err">' + e.message + "</div>"; });
+  }
+
+  /* ---------- 今日の関門（7番・§6-8・§6-9） ---------- */
+  function loadGates() {
+    return Promise.all([
+      api("/rest/v1/v_committed_sectors?select=*"),
+      api("/rest/v1/v_index_correlation?select=*&order=run_date.desc&limit=1"),
+      api("/rest/v1/v_relative_strength?select=*")
+    ]).then(function (res) {
+      var sec = res[0] || [], ix = (res[1] || [])[0] || {}, rs = (res[2] || [])[0] || {};
+      var h = "";
+      if (sec.length) {
+        h += '<div class="note"><b>7番 業種の制限</b><br>'
+          + sec.map(function (v) { return v.sector + "：" + v.name + "（" + v.state + "）"; }).join("<br>")
+          + "<br>同じ業種の銘柄は選べません（§5-4）。</div>";
+      }
+      if (ix.index_signal) {
+        h += '<div class="note"><b>§6-8 指数連動（⚠️暫定ルール）</b><br>'
+          + ix.lv1_ok + "/" + ix.passed + "銘柄でLv1が成立しています。"
+          + "個別ではなく指数のシグナルなので、<b>この日の新規建ては1銘柄まで</b>です。</div>";
+      }
+      if (rs.applies) {
+        h += '<div class="note"><b>§6-9 相対強弱（⚠️暫定ルール）</b><br>' + rs.note + "</div>";
+      }
+      $("#gates").innerHTML = h;
+    }).catch(function (e) { crash("関門", e); });
   }
 
   /* ---------- 集計 ---------- */
@@ -687,7 +714,7 @@ color:#fff;border:0;border-radius:7px}
 
   function load() {
     loadCandidates(); loadProposals(); loadPlans(); loadStats();
-    loadSettings(); loadMorning(); loadExtras();
+    loadSettings(); loadMorning(); loadExtras(); loadGates();
   }
 
   var saved = null;
