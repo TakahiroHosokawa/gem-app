@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="罠帳">
+<title>Gem 罠帳</title>
+<style>
+:root{--ink:#1B2430;--ink-2:#55636F;--paper:#F2F4F5;--card:#FFF;--rule:#C9D1D6;
+--rule-2:#E3E8EB;--ok:#1F6F5C;--ng:#A8321E;--hold:#8A6A1F;--link:#2E4A6B}
+*{box-sizing:border-box}html,body{margin:0;padding:0}
+body{background:var(--paper);color:var(--ink);font-size:16px;line-height:1.7;
+-webkit-text-size-adjust:100%;padding:env(safe-area-inset-top) 0 calc(env(safe-area-inset-bottom) + 32px);
+font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,system-ui,sans-serif}
+.wrap{max-width:640px;margin:0 auto;padding:0 20px}
+h1{font-size:19px;font-weight:600;margin:22px 0 2px}
+h1 small{display:block;font-size:12px;font-weight:400;color:var(--ink-2);letter-spacing:.06em}
+h2{font-size:15px;font-weight:600;margin:28px 0 10px;padding-bottom:7px;border-bottom:1px solid var(--rule)}
+p{margin:8px 0}.muted{color:var(--ink-2);font-size:13px;line-height:1.6}
+.num{font-variant-numeric:tabular-nums}
+nav{display:flex;margin:16px 0 4px;border:1px solid var(--rule);border-radius:9px;overflow:hidden}
+nav button{flex:1;padding:11px 4px;font:inherit;font-size:14px;background:var(--card);
+color:var(--ink-2);border:0;border-right:1px solid var(--rule)}
+nav button:last-child{border-right:0}
+nav button.on{background:var(--ink);color:#fff}
+.row{background:var(--card);border:1px solid var(--rule-2);border-radius:10px;padding:13px 15px;margin:9px 0}
+.row h3{margin:0 0 3px;font-size:15px;font-weight:600}
+.row .meta{font-size:12.5px;color:var(--ink-2)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));gap:6px 12px;margin-top:9px}
+.grid div{font-size:12.5px;color:var(--ink-2)}
+.grid b{display:block;font-size:15px;font-weight:600;color:var(--ink)}
+label{display:block;margin:15px 0 5px;font-size:13.5px;color:var(--ink-2)}
+input,select{width:100%;padding:13px 14px;font:inherit;background:var(--card);
+border:1px solid var(--rule);border-radius:9px;color:var(--ink)}
+input.big{font-size:23px;font-variant-numeric:tabular-nums;letter-spacing:.06em;text-align:right}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--link);outline-offset:2px}
+.btn{width:100%;padding:15px;margin-top:18px;font:inherit;font-size:16px;font-weight:600;
+background:var(--ink);color:#fff;border:0;border-radius:9px}
+.btn:disabled{opacity:.4}
+.btn.quiet{background:var(--card);color:var(--ink);border:1px solid var(--rule);font-weight:400;margin-top:9px}
+.three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-top:18px}
+.three button{padding:17px 5px;font:inherit;font-size:15px;font-weight:600;
+background:var(--card);border:1.5px solid var(--rule);border-radius:10px;color:var(--ink)}
+.verdict{margin-top:20px;padding:17px;border-radius:10px;border-left:4px solid}
+.verdict.ok{background:#EAF3F0;border-color:var(--ok)}
+.verdict.ng{background:#F8EBE8;border-color:var(--ng)}
+.verdict h3{margin:0 0 7px;font-size:16px}
+.verdict.ok h3{color:var(--ok)}.verdict.ng h3{color:var(--ng)}
+table{width:100%;border-collapse:collapse;margin-top:9px;font-size:14px}
+th,td{padding:6px 3px;text-align:right;border-bottom:1px solid var(--rule-2)}
+th:first-child,td:first-child{text-align:left;color:var(--ink-2);font-weight:400}
+.note{margin-top:13px;padding:12px 14px;background:#FBF7EC;border-left:3px solid var(--hold);
+border-radius:0 8px 8px 0;font-size:13px;line-height:1.65}
+.empty{padding:34px 18px;text-align:center;color:var(--ink-2);font-size:14px}
+.err{color:var(--ng);font-size:13.5px;margin-top:10px;word-break:break-word}
+#crash{display:none;margin:14px 0;padding:14px;background:#F8EBE8;border-left:4px solid var(--ng);
+border-radius:0 8px 8px 0;font-size:12.5px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.hide{display:none}
+.prop{display:grid;grid-template-columns:auto 1fr auto;gap:4px 10px;align-items:center;
+padding:9px 0;border-top:1px solid var(--rule-2);font-size:13.5px}
+.prop:first-of-type{border-top:0}
+.prop .lab{color:var(--ink-2);font-size:12.5px}
+.prop .nums{color:var(--ink-2);font-size:12px;grid-column:1/3}
+.prop .nums b{color:var(--ink);font-weight:600}
+.prop .v{font-size:12.5px;white-space:nowrap}
+.prop .v.ok{color:var(--ok);font-weight:600}
+.prop .v.ng{color:var(--ng)}
+.pick{padding:7px 12px;font:inherit;font-size:13px;font-weight:600;background:var(--ink);
+color:#fff;border:0;border-radius:7px}
+.dim{opacity:.55}
+.kv{display:grid;grid-template-columns:1fr auto;gap:5px 14px;font-size:14px}
+.kv div:nth-child(even){text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+.kv div:nth-child(odd){color:var(--ink-2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>罠帳<small>Gem スイングアドバイザー</small></h1>
+<div id="crash"></div>
+
+<section id="auth">
+  <h2>サインイン</h2>
+  <label for="em">メールアドレス</label>
+  <input id="em" type="email" autocomplete="username" inputmode="email">
+  <label for="pw">パスワード</label>
+  <input id="pw" type="password" autocomplete="current-password">
+  <button class="btn" id="signin">サインイン</button>
+  <div class="err" id="autherr"></div>
+  <p class="muted" style="margin-top:16px">アカウントは Supabase の Authentication &rarr; Users から作成します。</p>
+</section>
+
+<main id="app" class="hide">
+  <nav>
+    <button class="on" data-tab="cand">候補</button>
+    <button data-tab="plan">判定</button>
+    <button data-tab="rec">復唱</button>
+    <button data-tab="out">結果</button>
+    <button data-tab="stat">集計</button>
+  </nav>
+
+  <section id="tab-cand">
+    <h2 id="candh">候補</h2>
+    <div id="candlist"><div class="empty">読み込み中</div></div>
+  </section>
+
+  <section id="tab-plan" class="hide">
+    <h2 id="planh">判定</h2>
+    <p class="muted">Lv1・スイングロー・損切・利確・買値候補を日足から計算した結果です。
+      並びは到達余裕率の浅い順（§3-6）。<b>計算であって見立てではありません。</b>
+      スイングローが妥当かはチャートで確かめてください。</p>
+    <div id="planlist"><div class="empty">読み込み中</div></div>
+    <div id="pres"></div>
+  </section>
+
+  <section id="tab-stat" class="hide">
+    <h2>集計</h2>
+    <div id="statbox"><div class="empty">読み込み中</div></div>
+  </section>
+
+  <section id="tab-rec" class="hide">
+    <h2>復唱</h2>
+    <p class="muted">証券会社の注文画面を見ながら入力してください。計画値はここには表示されません。送信するまで照合結果も出ません。</p>
+    <label for="rplan">銘柄</label>
+    <select id="rplan"></select>
+    <div id="recform">
+      <label for="r1">買付指値</label><input id="r1" class="big" inputmode="decimal">
+      <label for="r2">利確指値</label><input id="r2" class="big" inputmode="decimal">
+      <label for="r3">損切逆指値</label><input id="r3" class="big" inputmode="decimal">
+      <label for="r4">株数</label><input id="r4" class="big" inputmode="numeric">
+      <button class="btn" id="rsend">照合する</button>
+    </div>
+    <div id="rres"></div>
+  </section>
+
+  <section id="tab-out" class="hide">
+    <h2>その日の結果</h2>
+    <label for="oplan">銘柄</label>
+    <select id="oplan"></select>
+    <div class="three">
+      <button data-kind="filled">約定</button>
+      <button data-kind="unfilled">未約定</button>
+      <button data-kind="miss">見送り</button>
+    </div>
+    <p class="muted" style="margin-top:12px">当日安値とA/B型の判定は日足から自動で入ります。</p>
+    <div id="ores"></div>
+  </section>
+
+  <button class="btn quiet" id="signout" style="margin-top:34px">サインアウト</button>
+</main>
+</div>
+
+<script>
+/* 外部ライブラリもESモジュールも使わない。標準の fetch だけで組む。
+   iOSのSafariで失敗しうる要因を減らすため。 */
+(function () {
+  "use strict";
+  var BASE = "https://qfkfooazzbqjtatwgpbb.supabase.co";
+  var KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFma2Zvb2F6emJxanRhdHdncGJiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgxMTk2NDUsImV4cCI6MjEwMzY5NTY0NX0.kzN8mZNGQFHgzIdy8nYjzZR2fgimSsURdWoC3xqrunA";
+  var TOKEN = null;
+
+  function $(s) { return document.querySelector(s); }
+  function show(el, on) { if (on) { el.classList.remove("hide"); } else { el.classList.add("hide"); } }
+  function yen(n) { return (n === null || n === undefined) ? "\u2014" : Number(n).toLocaleString("ja-JP"); }
+  function pct(n) { return (n === null || n === undefined) ? "\u2014" : Number(n).toFixed(2) + "%"; }
+
+  function crash(where, e) {
+    var box = $("#crash");
+    box.style.display = "block";
+    box.textContent += "[" + where + "] " + ((e && e.message) ? e.message : String(e)) + "\n";
+  }
+  window.onerror = function (m, s, l) { crash("script", m + " (line " + l + ")"); };
+  window.onunhandledrejection = function (ev) { crash("promise", ev.reason); };
+
+  function api(path, method, body) {
+    var h = { "apikey": KEY, "Content-Type": "application/json" };
+    if (TOKEN) { h["Authorization"] = "Bearer " + TOKEN; }
+    return fetch(BASE + path, {
+      method: method || "GET", headers: h,
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (r) {
+      return r.text().then(function (t) {
+        var j = null;
+        try { j = t ? JSON.parse(t) : null; } catch (e) { j = { raw: t }; }
+        if (!r.ok) {
+          var msg = "HTTP " + r.status;
+          if (j) { msg = j.message || j.error_description || j.error || j.msg || msg; }
+          throw new Error(msg);
+        }
+        return j;
+      });
+    });
+  }
+
+  function setToken(t) {
+    TOKEN = t;
+    try { if (t) { localStorage.setItem("gem_tok", t); } else { localStorage.removeItem("gem_tok"); } } catch (e) {}
+    show($("#auth"), !t); show($("#app"), !!t);
+    if (t) { load(); }
+  }
+
+  $("#signin").onclick = function () {
+    $("#autherr").textContent = "";
+    var b = $("#signin"); b.disabled = true;
+    api("/auth/v1/token?grant_type=password", "POST",
+        { email: $("#em").value.replace(/^\s+|\s+$/g, ""), password: $("#pw").value })
+      .then(function (d) { setToken(d.access_token); b.disabled = false; })
+      .catch(function (e) { $("#autherr").textContent = "サインインできません。" + e.message; b.disabled = false; });
+  };
+  $("#signout").onclick = function () { setToken(null); };
+
+  var tabs = document.querySelectorAll("nav button");
+  Array.prototype.forEach.call(tabs, function (btn) {
+    btn.onclick = function () {
+      Array.prototype.forEach.call(tabs, function (x) { x.classList.remove("on"); });
+      btn.classList.add("on");
+      ["cand", "plan", "rec", "out", "stat"].forEach(function (t) {
+        show($("#tab-" + t), t === btn.getAttribute("data-tab"));
+      });
+    };
+  });
+
+  function loadCandidates() {
+    var box = $("#candlist");
+    return api("/rest/v1/candidates?select=run_date&order=run_date.desc&limit=1")
+      .then(function (last) {
+        if (!last || !last.length) { box.innerHTML = '<div class="empty">候補がまだありません。</div>'; return; }
+        var d = last[0].run_date;
+        $("#candh").textContent = "候補　" + d + " 終値";
+        return Promise.all([
+          api("/rest/v1/candidates?select=*&run_date=eq." + d + "&passed=is.true&order=dev25.asc"),
+          api("/rest/v1/v_stage2?select=code,verdict&run_date=eq." + d),
+          api("/rest/v1/settings?select=key,value")
+        ]).then(function (res) {
+          var rows = res[0] || [], st = res[1] || [], sets = res[2] || [];
+          var vmap = {}; st.forEach(function (r) { vmap[r.code] = r.verdict; });
+          var s = {}; sets.forEach(function (r) { s[r.key] = Number(r.value); });
+          var cap = s.capital * s.concentration;
+          if (!rows.length) { box.innerHTML = '<div class="empty">通過した銘柄はありません。</div>'; return; }
+          box.innerHTML = rows.map(function (r) {
+            var code = r.code.slice(0, 4);
+            var win = r.close_adj - r.ma75;
+            var sh = Math.floor(cap / r.close_adj / 100) * 100;
+            return '<article class="row"><h3>' + code + "　" + r.name + "</h3>"
+              + '<div class="meta">' + (r.s33nm || "") + "　" + (vmap[code] || "決算未取得") + "</div>"
+              + '<div class="grid num">'
+              + "<div>25日乖離<b>" + pct(r.dev25) + "</b></div>"
+              + "<div>75日乖離<b>" + pct(r.dev75) + "</b></div>"
+              + "<div>RSI<b>" + Number(r.rsi).toFixed(1) + "</b></div>"
+              + "<div>1単元<b>" + yen(Math.round(r.unit_yen)) + "</b></div>"
+              + "<div>窓<b>" + yen(win.toFixed(1)) + "円</b></div>"
+              + "<div>株数上限<b>" + yen(sh) + "</b></div>"
+              + "<div>3番失格<b>" + yen((r.ma25 * 0.98).toFixed(1)) + "</b></div>"
+              + "</div></article>";
+          }).join("");
+        });
+      })
+      .catch(function (e) { crash("候補", e); box.innerHTML = '<div class="err">' + e.message + "</div>"; });
+  }
+
+  function loadPlans() {
+    return api("/rest/v1/v_plans_pending?select=*").then(function (rows) {
+      rows = rows || [];
+      var opts = rows.map(function (p) {
+        return '<option value="' + p.id + '">' + p.plan_date + "　" + p.code + " " + p.name
+          + (p.recited ? "　復唱済" : "") + (p.closed ? "　結果記録済" : "") + "</option>";
+      }).join("");
+      var empty = '<option value="">登録された計画がありません</option>';
+      $("#rplan").innerHTML = opts || empty;
+      $("#oplan").innerHTML = opts || empty;
+      show($("#recform"), rows.length > 0);
+    }).catch(function (e) { crash("計画", e); });
+  }
+
+  $("#rsend").onclick = function () {
+    var id = $("#rplan").value;
+    if (!id) { return; }
+    var v = ["#r1", "#r2", "#r3", "#r4"].map(function (s) { return $(s).value.replace(/^\s+|\s+$/g, ""); });
+    var blank = false;
+    v.forEach(function (x) { if (x === "") { blank = true; } });
+    if (blank) { $("#rres").innerHTML = '<div class="err">4項目すべて入力してください。</div>'; return; }
+    var b = $("#rsend"); b.disabled = true;
+    api("/rest/v1/rpc/submit_recitation", "POST", {
+      p_plan_id: Number(id), p_entry: Number(v[0]), p_take_profit: Number(v[1]),
+      p_stop_loss: Number(v[2]), p_shares: Number(v[3])
+    }).then(function (d) {
+      b.disabled = false;
+      if (d && d.error) { $("#rres").innerHTML = '<div class="err">' + d.error + "</div>"; return; }
+      if (d.matched) {
+        $("#rres").innerHTML = '<div class="verdict ok"><h3>一致しました</h3>'
+          + '<p class="muted" style="margin:0">' + d.code + " " + d.name + "</p>"
+          + '<table class="num"><tr><th>概算約定代金</th><td>' + yen(d.gross) + " 円</td></tr>"
+          + "<tr><th>利確時の損益</th><td>+" + yen(d.profit_at_tp) + " 円</td></tr>"
+          + "<tr><th>損切時の損益</th><td>" + yen(d.loss_at_sl) + " 円</td></tr></table></div>"
+          + '<div class="note">確定ボタンの前に、画面で5点。<br>'
+          + "執行条件が「指定なし」／新規の有効期限が本日中／利確が上・損切が下／"
+          + "<b>損切発動後の執行方法が成行</b>／<b>売り注文の失効日</b>（権利落ち日の直前を避ける）。<br>"
+          + "下2つは画面下端にあり、スクロールしないと見えません。</div>";
+        ["#r1", "#r2", "#r3", "#r4"].forEach(function (s) { $(s).value = ""; });
+        loadPlans();
+      } else {
+        $("#rres").innerHTML = '<div class="verdict ng"><h3>一致しません。確定ボタンを押さないでください</h3>'
+          + '<table class="num"><tr><th>項目</th><td>入力</td><td>計画</td></tr>'
+          + d.mismatch.map(function (m) {
+              return "<tr><th>" + m["項目"] + "</th><td>" + yen(m["入力"]) + "</td><td>" + yen(m["計画"]) + "</td></tr>";
+            }).join("")
+          + '</table><p class="muted" style="margin:9px 0 0">注文画面の値を直すか、この計画そのものを見直してください。</p></div>';
+      }
+    }).catch(function (e) { b.disabled = false; $("#rres").innerHTML = '<div class="err">' + e.message + "</div>"; });
+  };
+
+  Array.prototype.forEach.call(document.querySelectorAll(".three button"), function (btn) {
+    btn.onclick = function () {
+      var id = $("#oplan").value;
+      if (!id) { return; }
+      var kind = btn.getAttribute("data-kind");
+      var label = { filled: "約定", unfilled: "未約定", miss: "見送り" }[kind];
+      if (!window.confirm(label + " として記録します。よろしいですか。")) { return; }
+      api("/rest/v1/rpc/record_outcome", "POST", { p_plan_id: Number(id), p_kind: kind })
+        .then(function (d) {
+          if (d && d.error) { $("#ores").innerHTML = '<div class="err">' + d.error + "</div>"; return; }
+          var ab = d.ab_type
+            ? (d.ab_type + "型（" + (d.ab_type === "A" ? "下げたが浅かった" : "そもそも下げなかった") + "）")
+            : "判定保留";
+          $("#ores").innerHTML = '<div class="verdict ok"><h3>' + label + " として記録しました</h3>"
+            + '<table class="num">'
+            + (d.day_low != null ? "<tr><th>当日安値</th><td>" + yen(d.day_low) + "</td></tr>" : "")
+            + (d.prev_close != null ? "<tr><th>前日終値</th><td>" + yen(d.prev_close) + "</td></tr>" : "")
+            + (kind === "unfilled" ? "<tr><th>分類</th><td>" + ab + "</td></tr>" : "")
+            + "</table>"
+            + '<p class="muted" style="margin:9px 0 0">2週間後の株価とTOPIX超過リターンは、追跡期日に自動で入ります。</p>'
+            + (d.note ? '<p class="muted" style="margin:6px 0 0">' + d.note + "</p>" : "")
+            + "</div>";
+          loadPlans();
+        })
+        .catch(function (e) { $("#ores").innerHTML = '<div class="err">' + e.message + "</div>"; });
+    };
+  });
+
+  /* ---------- 判定（ステージ3・4） ---------- */
+  function loadProposals() {
+    var box = $("#planlist");
+    return api("/rest/v1/v_proposals?select=*&limit=200").then(function (rows) {
+      rows = rows || [];
+      if (!rows.length) { box.innerHTML = '<div class="empty">判定結果がまだありません。</div>'; return; }
+      var d = rows[0].run_date;
+      $("#planh").textContent = "判定　" + d + " 終値";
+      var byCode = {};
+      rows.filter(function (r) { return r.run_date === d; }).forEach(function (r) {
+        (byCode[r.code] = byCode[r.code] || []).push(r);
+      });
+      // 通過あり → Lv1成立だが候補なし → 保留 の順
+      var codes = Object.keys(byCode).sort(function (a, b) {
+        var ra = byCode[a].some(function (r) { return r.verdict === "○"; }) ? 0 : (byCode[a][0].lv1 ? 1 : 2);
+        var rb = byCode[b].some(function (r) { return r.verdict === "○"; }) ? 0 : (byCode[b][0].lv1 ? 1 : 2);
+        if (ra !== rb) return ra - rb;
+        var ma = Math.min.apply(null, byCode[a].map(function (r) { return r.rank_in_code || 99; }));
+        var mb = Math.min.apply(null, byCode[b].map(function (r) { return r.rank_in_code || 99; }));
+        return ma - mb;
+      });
+      box.innerHTML = codes.map(function (code) {
+        var rs = byCode[code], h = rs[0];
+        var head = '<h3>' + code + "\u3000" + h.name + "</h3>"
+          + '<div class="meta">' + (h.s33nm || "") + "\u3000Lv1 " + (h.lv1 ? "○ " : "✗ ") + h.lv1_note + "</div>";
+        if (!h.lv1) return '<article class="row dim">' + head + "</article>";
+        if (h.swing_low == null) return '<article class="row dim">' + head
+          + '<div class="muted" style="margin-top:6px">' + h.verdict + "</div></article>";
+        var common = '<div class="muted num" style="margin:6px 0 2px">損切 <b>' + yen(h.stop_loss) + "</b>（"
+          + h.swing_low_on.slice(5) + "安値" + yen(h.swing_low) + "の下・K=" + h.swing_k
+          + (h.swing_k === 1 ? "・弱" : "") + "）　利確 <b>" + yen(h.target) + "</b>（" + h.target_on.slice(5) + "高値）"
+          + "<br>平均下落幅 " + yen(h.avg_drop5) + "円/日　75日線 " + yen(h.ma75)
+          + "（" + (h.ma75_slope >= 0 ? "+" : "") + h.ma75_slope + "円/日）　3番失格 " + yen(h.fail_line_3) + "</div>";
+        var lines = rs.slice().sort(function (a, b) { return Number(b.entry) - Number(a.entry); }).map(function (r) {
+          var ok = r.verdict === "○";
+          var nums = ok
+            ? "R/R <b>" + Number(r.rr).toFixed(2) + "</b>　" + yen(r.shares) + "株　実効 <b>" + Number(r.effective_r).toFixed(2)
+              + "R</b>　集中 " + (r.concentration * 100).toFixed(1) + "%　余裕 <b>" + Number(r.reach_margin).toFixed(2)
+              + "倍</b>　75線 " + (r.ma75_days == null ? "—" : r.ma75_days + "日")
+            : (r.rr != null ? "R/R " + Number(r.rr).toFixed(2) + "　" : "") + (r.reach_margin != null ? "余裕 " + Number(r.reach_margin).toFixed(2) + "倍" : "");
+          return '<div class="prop' + (ok ? "" : " dim") + '">'
+            + '<span class="lab">' + r.entry_label + (ok && r.rank_in_code ? "　#" + r.rank_in_code : "") + "</span>"
+            + '<span class="num"><b>' + yen(r.entry) + "</b></span>"
+            + (ok ? '<button class="pick" data-id="' + r.id + '">この買値で登録</button>'
+                  : '<span class="v ng">' + r.verdict + "</span>")
+            + '<span class="nums">' + nums + "</span></div>";
+        }).join("");
+        return '<article class="row">' + head + common + lines + "</article>";
+      }).join("");
+      Array.prototype.forEach.call(box.querySelectorAll(".pick"), function (btn) {
+        btn.onclick = function () {
+          if (!window.confirm("この買値で明日の発注計画を登録します。よろしいですか。")) return;
+          btn.disabled = true;
+          api("/rest/v1/rpc/choose_proposal", "POST", { p_proposal_id: Number(btn.getAttribute("data-id")) })
+            .then(function (d) {
+              if (d && d.error) { $("#pres").innerHTML = '<div class="err">' + d.error + "</div>"; btn.disabled = false; return; }
+              $("#pres").innerHTML = '<div class="verdict ok"><h3>登録しました</h3>'
+                + '<p class="muted" style="margin:0">' + d.plan_date + "　" + d.code + " " + d.name
+                + "</p><p class=\"muted\" style=\"margin:8px 0 0\">明朝、夜間先物 ÷ 現物終値（§6-7）を確認してから注文を入力し、「復唱」タブで照合してください。</p></div>";
+              loadPlans();
+            })
+            .catch(function (e) { $("#pres").innerHTML = '<div class="err">' + e.message + "</div>"; btn.disabled = false; });
+        };
+      });
+    }).catch(function (e) { crash("判定", e); box.innerHTML = '<div class="err">' + e.message + "</div>"; });
+  }
+
+  /* ---------- 集計 ---------- */
+  function loadStats() {
+    var box = $("#statbox");
+    return Promise.all([
+      api("/rest/v1/v_state_block?select=*"),
+      api("/rest/v1/v_trade_stats?select=*"),
+      api("/rest/v1/v_miss_by_reason?select=*"),
+      api("/rest/v1/v_unfilled_stats?select=*")
+    ]).then(function (res) {
+      var sb = (res[0] || [])[0] || {}, ts = (res[1] || [])[0] || {}, mr = res[2] || [], us = res[3] || [];
+      var pctf = function (x) { return x == null ? "—" : (Number(x) * 100).toFixed(2) + "pt"; };
+      var html = '<article class="row"><h3>状態ブロック（§0.5）</h3><div class="kv num">'
+        + "<div>スイング資金</div><div>" + yen(sb.capital) + " 円</div>"
+        + "<div>リスク率</div><div>" + (Number(sb.risk_rate) * 100).toFixed(1) + "%</div>"
+        + "<div>1R</div><div>" + yen(Math.round(sb.one_r)) + " 円</div>"
+        + "<div>運用モード</div><div>" + (sb.mode || "—") + "</div>"
+        + "<div>判定可否</div><div>" + (sb.judgeable ? "判定可能" : "参考値・判定不可") + "</div></div></article>";
+      html += '<article class="row"><h3>取引ログ（スイングのみ）</h3><div class="kv num">'
+        + "<div>往復数</div><div>" + (ts.trips || 0) + "</div>"
+        + "<div>勝率</div><div>" + (ts.win_rate == null ? "—" : (Number(ts.win_rate) * 100).toFixed(0) + "%") + "</div>"
+        + "<div>平均利益R</div><div>" + (ts.avg_win_r == null ? "—" : Number(ts.avg_win_r).toFixed(2)) + "</div>"
+        + "<div>平均損失R</div><div>" + (ts.avg_loss_r == null ? "—" : Number(ts.avg_loss_r).toFixed(2)) + "</div></div></article>";
+      html += '<article class="row"><h3>見送りログ　落ちた項目別の超過リターン</h3>'
+        + '<table class="num"><tr><th>項目</th><td>件</td><td>追跡</td><td>平均超過</td><td>勝</td></tr>'
+        + mr.map(function (r) {
+            return "<tr><th>" + (r.fail_code || "—") + "</th><td>" + r.total + "</td><td>" + r.tracked
+              + "</td><td>" + pctf(r.avg_excess) + "</td><td>" + (r.positive || 0) + "/" + r.tracked + "</td></tr>";
+          }).join("") + "</table>"
+        + '<p class="muted" style="margin:8px 0 0">判定は超過リターン（TOPIX比）で行う（§8-10）。判定下限 ' + (sb.min_samples || 20) + "件。</p></article>";
+      html += '<article class="row"><h3>未約定ログ　A型 / B型</h3>'
+        + '<table class="num"><tr><th>型</th><td>件</td><td>追跡</td><td>平均未達</td><td>平均超過</td></tr>'
+        + us.map(function (r) {
+            return "<tr><th>" + (r.ab_type || "未判定") + "</th><td>" + r.total + "</td><td>" + r.tracked
+              + "</td><td>" + (r.avg_shortfall == null ? "—" : (Number(r.avg_shortfall) * 100).toFixed(2) + "%")
+              + "</td><td>" + pctf(r.avg_excess) + "</td></tr>";
+          }).join("") + "</table>"
+        + '<p class="muted" style="margin:8px 0 0">平均未達幅の母数はA型のみ（§4-B）。</p></article>';
+      box.innerHTML = html;
+    }).catch(function (e) { crash("集計", e); box.innerHTML = '<div class="err">' + e.message + "</div>"; });
+  }
+
+  function load() { loadCandidates(); loadProposals(); loadPlans(); loadStats(); }
+
+  var saved = null;
+  try { saved = localStorage.getItem("gem_tok"); } catch (e) {}
+  if (saved) {
+    TOKEN = saved;
+    api("/rest/v1/settings?select=key&limit=1")
+      .then(function () { show($("#auth"), false); show($("#app"), true); load(); })
+      .catch(function () { setToken(null); });
+  }
+})();
+</script>
+</body>
+</html>
