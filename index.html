@@ -57,6 +57,13 @@ border-radius:0 8px 8px 0;font-size:13px;line-height:1.65}
 #crash{display:none;margin:14px 0;padding:14px;background:#F8EBE8;border-left:4px solid var(--ng);
 border-radius:0 8px 8px 0;font-size:12.5px;line-height:1.6;white-space:pre-wrap;word-break:break-word}
 .hide{display:none}
+.cp{display:flex;align-items:center;justify-content:space-between;gap:10px;
+background:var(--card);border:1px solid var(--rule);border-radius:9px;
+padding:11px 14px;margin:7px 0}
+.cp span{font-size:12.5px;color:var(--ink-2)}
+.cp b{font-size:24px;font-variant-numeric:tabular-nums;letter-spacing:.05em}
+.cp button{padding:7px 13px;font:inherit;font-size:12.5px;background:var(--paper);
+border:1px solid var(--rule);border-radius:7px;color:var(--ink)}
 .prop{display:grid;grid-template-columns:auto 1fr auto;gap:4px 10px;align-items:center;
 padding:9px 0;border-top:1px solid var(--rule-2);font-size:13.5px}
 .prop:first-of-type{border-top:0}
@@ -94,6 +101,7 @@ color:#fff;border:0;border-radius:7px}
   <nav>
     <button class="on" data-tab="cand">候補</button>
     <button data-tab="plan">判定</button>
+    <button data-tab="ord">発注</button>
     <button data-tab="rec">復唱</button>
     <button data-tab="out">結果</button>
     <button data-tab="stat">集計</button>
@@ -127,15 +135,39 @@ color:#fff;border:0;border-radius:7px}
       資金を変えると1Rと株数が変わるため、最新日の候補と買値候補を自動で計算し直します。<br>
       集中度80%と判定下限20件は<b>ルール</b>なので、ここでは変更できません（§9のL3手続き）。</p>
 
+    <h2>保有中の建玉</h2>
+    <div id="posbox"></div>
+    <h2>判定下限までの進捗</h2>
+    <div id="progbox"></div>
+    <h2>暫定ルールの期限（§9-2）</h2>
+    <div id="sunbox"></div>
     <h2>集計</h2>
     <div id="statbox"><div class="empty">読み込み中</div></div>
     <h2>設定の変更履歴</h2>
     <div id="loglist"></div>
   </section>
 
+  <section id="tab-ord" class="hide">
+    <h2>発注セット</h2>
+    <p class="muted">楽天の注文画面に入力する値です。入力し終えたら「復唱」タブへ。</p>
+    <label for="oplan2">銘柄</label>
+    <select id="oplan2"></select>
+    <div id="ordbox"></div>
+    <h2>明朝のチェック</h2>
+    <div id="morning"></div>
+    <label for="fut">日経225先物（夜間）</label>
+    <input id="fut" class="big" inputmode="decimal">
+    <label for="nk">日経平均・前営業日の終値</label>
+    <input id="nk" class="big" inputmode="decimal">
+    <button class="btn" id="fsend">§6-7 を判定して記録する</button>
+    <div id="fres"></div>
+  </section>
+
   <section id="tab-rec" class="hide">
     <h2>復唱</h2>
-    <p class="muted">証券会社の注文画面を見ながら入力してください。計画値はここには表示されません。送信するまで照合結果も出ません。</p>
+    <div class="note"><b>楽天の注文画面を見ながら打ってください。</b>
+      「発注」タブの数字を写すと、同じ数字を二度見るだけになり、注文画面は一度も検証されません（§8-17）。
+      計画値はここには表示されず、送信するまで照合結果も出ません。</div>
     <label for="rplan">銘柄</label>
     <select id="rplan"></select>
     <div id="recform">
@@ -152,6 +184,7 @@ color:#fff;border:0;border-radius:7px}
     <h2>その日の結果</h2>
     <label for="oplan">銘柄</label>
     <select id="oplan"></select>
+    <div id="hint"></div>
     <div class="three">
       <button data-kind="filled">約定</button>
       <button data-kind="unfilled">未約定</button>
@@ -229,7 +262,7 @@ color:#fff;border:0;border-radius:7px}
     btn.onclick = function () {
       Array.prototype.forEach.call(tabs, function (x) { x.classList.remove("on"); });
       btn.classList.add("on");
-      ["cand", "plan", "rec", "out", "stat"].forEach(function (t) {
+      ["cand", "plan", "ord", "rec", "out", "stat"].forEach(function (t) {
         show($("#tab-" + t), t === btn.getAttribute("data-tab"));
       });
     };
@@ -283,7 +316,9 @@ color:#fff;border:0;border-radius:7px}
       var empty = '<option value="">登録された計画がありません</option>';
       $("#rplan").innerHTML = opts || empty;
       $("#oplan").innerHTML = opts || empty;
+      $("#oplan2").innerHTML = opts || empty;
       show($("#recform"), rows.length > 0);
+      loadOrderSet(); loadHint();
     }).catch(function (e) { crash("計画", e); });
   }
 
@@ -517,7 +552,143 @@ color:#fff;border:0;border-radius:7px}
     }).catch(function (e) { b.disabled = false; $("#cres").innerHTML = '<div class="err">' + e.message + "</div>"; });
   };
 
-  function load() { loadCandidates(); loadProposals(); loadPlans(); loadStats(); loadSettings(); }
+  /* ---------- 発注セット（§10-3） ---------- */
+  function cpRow(label, val) {
+    return '<div class="cp"><span>' + label + '</span><b>' + val
+      + '</b><button data-cp="' + val + '">コピー</button></div>';
+  }
+  function loadOrderSet() {
+    var id = $("#oplan2").value;
+    var box = $("#ordbox");
+    if (!id) { box.innerHTML = '<div class="empty">登録された計画がありません。判定タブで買値を選んでください。</div>'; return; }
+    api("/rest/v1/rpc/get_order_set", "POST", { p_plan_id: Number(id) }).then(function (d) {
+      if (d && d.error) { box.innerHTML = '<div class="err">' + d.error + "</div>"; return; }
+      box.innerHTML = '<div class="muted" style="margin:10px 0 4px">' + d.plan_date + "　"
+        + d.code + " " + d.name + (d.recited ? "　（復唱済）" : "") + "</div>"
+        + cpRow("買付指値", d.entry) + cpRow("利確指値", d.take_profit)
+        + cpRow("損切逆指値", d.stop_loss) + cpRow("株数", d.shares)
+        + '<div class="kv num" style="margin-top:12px">'
+        + "<div>概算約定代金</div><div>" + yen(d.gross) + " 円</div>"
+        + "<div>利確時の損益</div><div>+" + yen(d.profit_at_tp) + " 円</div>"
+        + "<div>損切時の損益</div><div>" + yen(d.loss_at_sl) + " 円</div>"
+        + "<div>R/R</div><div>" + Number(d.rr).toFixed(2) + "</div>"
+        + "<div>実効リスク</div><div>" + Number(d.effective_r).toFixed(2) + "R</div>"
+        + "<div>集中度</div><div>" + (d.concentration * 100).toFixed(1) + "%</div>"
+        + "<div>到達余裕</div><div>" + Number(d.reach_margin).toFixed(2) + "倍</div>"
+        + "<div>75日線到達</div><div>" + (d.ma75_days == null ? "—" : d.ma75_days + "日") + "</div></div>"
+        + '<div class="note">注文形式 IFD-OCO　／　<b>新規は本日中</b>　／　決済は長期<br>'
+        + "根拠：" + (d.basis || "") + "</div>";
+      Array.prototype.forEach.call(box.querySelectorAll("[data-cp]"), function (b) {
+        b.onclick = function () {
+          var t = b.getAttribute("data-cp");
+          if (navigator.clipboard) { navigator.clipboard.writeText(t); }
+          b.textContent = "コピー済";
+          setTimeout(function () { b.textContent = "コピー"; }, 1200);
+        };
+      });
+    }).catch(function (e) { crash("発注", e); box.innerHTML = '<div class="err">' + e.message + "</div>"; });
+  }
+  $("#oplan2").onchange = loadOrderSet;
+
+  /* ---------- 明朝のチェック ---------- */
+  function loadMorning() {
+    return api("/rest/v1/v_morning?select=*").then(function (rows) {
+      var m = (rows || [])[0] || {};
+      $("#morning").innerHTML = '<article class="row">'
+        + '<div class="kv num"><div>TOPIX終値（' + (m.topix_date || "—") + "）</div><div>"
+        + (m.topix_close == null ? "—" : yen(m.topix_close)) + "</div>"
+        + "<div>前日比</div><div>" + (m.topix_pct == null ? "—" : (m.topix_pct > 0 ? "+" : "") + m.topix_pct + "%") + "</div>"
+        + "<div>§6-9 相対強弱</div><div>" + (m.relative_strength_applies ? "判定が要る" : "適用外") + "</div></div>"
+        + '<div class="note"><b>§6-7 夜間先物は手作業です。</b>'
+        + "iSPEEDで日経225先物（夜間）を見て、<b>日経現物の終値で割って</b>ください。"
+        + "アプリ表示の「前日比%」は先物の清算値比なので使えません。<br>"
+        + "乖離が±1.5%を超えたら、その注文は水準を引き直します（見送りではありません）。</div>"
+        + '<div class="note">確定ボタンの前に5点。執行条件「指定なし」／新規は本日中／'
+        + "利確が上・損切が下／<b>損切発動後が成行</b>／<b>売り注文の失効日</b>。下2つは画面下端です。</div>"
+        + "</article>";
+    }).catch(function (e) { crash("明朝", e); });
+  }
+
+  /* ---------- §6-7 夜間先物 ---------- */
+  $("#fsend").onclick = function () {
+    var f = $("#fut").value.replace(/[^0-9.]/g, ""), n = $("#nk").value.replace(/[^0-9.]/g, "");
+    if (!f || !n) { $("#fres").innerHTML = '<div class="err">両方入力してください。</div>'; return; }
+    var b = $("#fsend"); b.disabled = true;
+    api("/rest/v1/rpc/record_futures", "POST",
+        { p_futures: Number(f), p_nikkei: Number(n) })
+      .then(function (d) {
+        b.disabled = false;
+        if (d && d.error) { $("#fres").innerHTML = '<div class="err">' + d.error + "</div>"; return; }
+        $("#fres").innerHTML = '<div class="verdict ' + (d.breached ? "ng" : "ok") + '">'
+          + "<h3>乖離 " + (d.gap_pct > 0 ? "+" : "") + d.gap_pct + "%</h3>"
+          + '<p class="muted" style="margin:0">' + d.verdict + "</p>"
+          + '<p class="muted" style="margin:8px 0 0">観測 ' + d.samples + "件／超過率 "
+          + d.breach_rate + "%（§9-2の検証データ）</p></div>";
+      })
+      .catch(function (e) { b.disabled = false; $("#fres").innerHTML = '<div class="err">' + e.message + "</div>"; });
+  };
+
+  /* ---------- 結果の事前判定 ---------- */
+  function loadHint() {
+    var id = $("#oplan").value;
+    if (!id) { $("#hint").innerHTML = ""; return; }
+    api("/rest/v1/v_outcome_hint?select=*&plan_id=eq." + id).then(function (rows) {
+      var h = (rows || [])[0];
+      if (!h) { $("#hint").innerHTML = ""; return; }
+      $("#hint").innerHTML = '<div class="note">日足からの推定：<b>' + h["推定"] + "</b>"
+        + (h["当日安値"] != null ? "　当日安値 " + yen(h["当日安値"]) + "／前日終値 " + yen(h["前日終値"]) : "")
+        + (h.ab_type ? "　" + h.ab_type + "型" : "")
+        + (h.recorded ? "<br><b>この計画は記録済みです。</b>" : "")
+        + "<br>実際の約定は証券会社の記録が優先です。確認してからタップしてください。</div>";
+    }).catch(function (e) { crash("事前判定", e); });
+  }
+  $("#oplan").onchange = loadHint;
+
+  /* ---------- 建玉・進捗・期限 ---------- */
+  function loadExtras() {
+    return Promise.all([
+      api("/rest/v1/v_positions?select=*"),
+      api("/rest/v1/v_progress?select=*"),
+      api("/rest/v1/v_sunset?select=*")
+    ]).then(function (res) {
+      var ps = res[0] || [], pg = res[1] || [], sn = res[2] || [];
+      $("#posbox").innerHTML = ps.length
+        ? ps.map(function (p) {
+            return '<article class="row"><h3>' + p.code + "\u3000" + p.name + "</h3>"
+              + '<div class="kv num">'
+              + "<div>約定日 / 経過</div><div>" + p["約定日"] + " / " + p["経過日数"] + "日</div>"
+              + "<div>買値 → 現在値</div><div>" + yen(p.entry) + " → " + yen(p.last_close) + "</div>"
+              + "<div>含み損益</div><div>" + (p["含み損益"] > 0 ? "+" : "") + yen(p["含み損益"]) + " 円（"
+              + Number(p["含みR"]).toFixed(2) + "R）</div>"
+              + "<div>損切 / 利確</div><div>" + yen(p.stop_loss) + " / " + yen(p.take_profit) + "</div>"
+              + "<div>トレール候補</div><div>" + yen(p["トレール候補"]) + "</div></div>"
+              + (p["要塞化可能"] ? '<div class="note"><b>トレール候補が買値を上回っています。</b>'
+                  + "逆指値を " + yen(p["トレール候補"]) + " へ引き上げれば、最悪でもプラスで終わります（§3-2）。</div>" : "")
+              + "</article>";
+          }).join("")
+        : '<div class="empty">保有中の建玉はありません。</div>';
+
+      $("#progbox").innerHTML = '<table class="num"><tr><th>項目</th><td>件数</td><td>下限</td><td>残り</td></tr>'
+        + pg.map(function (r) {
+            var left = Math.max(0, r.need - r.done);
+            return "<tr><th>" + r.item + "</th><td>" + r.done + "</td><td>" + r.need + "</td><td>"
+              + (left === 0 ? "到達" : "あと" + left) + "</td></tr>";
+          }).join("") + "</table>";
+
+      $("#sunbox").innerHTML = sn.map(function (r) {
+        return '<article class="row"><h3>' + r.label + "</h3>"
+          + '<div class="kv num"><div>追跡済</div><div>' + r.tracked + " / " + r.min_samples + "</div>"
+          + "<div>平均超過</div><div>" + (r.avg_excess_pt == null ? "—" : (r.avg_excess_pt > 0 ? "+" : "") + r.avg_excess_pt + "pt") + "</div>"
+          + "<div>日没期限</div><div>" + (r.sunset_exempt ? "—" : r.sunset_on + "（あと" + r.days_left + "日）") + "</div></div>"
+          + '<div class="muted" style="margin-top:6px">' + r.status + "</div></article>";
+      }).join("");
+    }).catch(function (e) { crash("集計拡張", e); });
+  }
+
+  function load() {
+    loadCandidates(); loadProposals(); loadPlans(); loadStats();
+    loadSettings(); loadMorning(); loadExtras();
+  }
 
   var saved = null;
   try { saved = localStorage.getItem("gem_tok"); } catch (e) {}
