@@ -117,6 +117,7 @@ color:#fff;border:0;border-radius:7px}
     <p class="muted">Lv1・スイングロー・損切・利確・買値候補を日足から計算した結果です。
       並びは到達余裕率の浅い順（§3-6）。<b>計算であって見立てではありません。</b>
       スイングローが妥当かはチャートで確かめてください。</p>
+    <div id="capacity"></div>
     <div id="gates"></div>
     <div id="planlist"><div class="empty">読み込み中</div></div>
     <div id="pres"></div>
@@ -447,12 +448,40 @@ color:#fff;border:0;border-radius:7px}
               $("#pres").innerHTML = '<div class="verdict ok"><h3>登録しました</h3>'
                 + '<p class="muted" style="margin:0">' + d.plan_date + "　" + d.code + " " + d.name
                 + "</p><p class=\"muted\" style=\"margin:8px 0 0\">明朝、夜間先物 ÷ 現物終値（§6-7）を確認してから注文を入力し、「復唱」タブで照合してください。</p></div>";
-              loadPlans();
+              loadPlans(); loadCapacity(); loadGates();
             })
             .catch(function (e) { $("#pres").innerHTML = '<div class="err">' + e.message + "</div>"; btn.disabled = false; });
         };
       });
     }).catch(function (e) { crash("判定", e); box.innerHTML = '<div class="err">' + e.message + "</div>"; });
+  }
+
+  /* ---------- 資金とリスクの残枠（§3-4 合計リスク上限） ---------- */
+  function loadCapacity() {
+    return api("/rest/v1/v_capacity?select=*").then(function (rows) {
+      var c = (rows || [])[0];
+      if (!c) { $("#capacity").innerHTML = ""; return; }
+      var riskLeft = Number(c.free_risk_r), riskUsed = Number(c.used_risk_r), riskMax = Number(c.max_risk_r);
+      var pct = Math.min(100, Math.round(riskUsed / riskMax * 100));
+      var tone = riskLeft <= 0 ? "ng" : (riskLeft < 1 ? "hold" : "ok");
+      $("#capacity").innerHTML =
+        '<article class="row">'
+        + '<h3>追加で建てられるか</h3>'
+        + '<div class="kv num">'
+        + "<div>保有中 / 発注中</div><div>" + c.held_n + " / " + c.pending_n + " 銘柄</div>"
+        + "<div>投入済</div><div>" + yen(c.committed_yen) + " 円（" + c.committed_pct + "%）</div>"
+        + "<div>残余資金</div><div><b>" + yen(c.free_yen) + " 円</b></div>"
+        + "<div>使用中リスク</div><div>" + riskUsed.toFixed(2) + "R / 上限 " + riskMax.toFixed(1) + "R</div>"
+        + "<div>残余リスク</div><div><b>" + riskLeft.toFixed(2) + "R</b></div>"
+        + "<div>追加可能額の目安</div><div>" + yen(c.headroom_yen) + " 円</div>"
+        + "</div>"
+        + '<div style="margin-top:10px;height:8px;background:var(--rule-2);border-radius:4px;overflow:hidden">'
+        + '<div style="width:' + pct + '%;height:100%;background:var(--' + tone + ')"></div></div>'
+        + '<p class="muted" style="margin:8px 0 0">資金が残っていても、<b>合計リスクが3Rを超える計画は登録できません</b>。'
+        + "業種の異なる4銘柄が同じ日にまとめて損切になった例（-4R）を防ぐための上限です。"
+        + "「追加可能額の目安」は損切幅＝株価2.5%を仮定した概算で、実際は銘柄ごとに変わります。</p>"
+        + "</article>";
+    }).catch(function (e) { crash("残枠", e); });
   }
 
   /* ---------- 今日の関門（7番・§6-8・§6-9） ---------- */
@@ -714,7 +743,7 @@ color:#fff;border:0;border-radius:7px}
 
   function load() {
     loadCandidates(); loadProposals(); loadPlans(); loadStats();
-    loadSettings(); loadMorning(); loadExtras(); loadGates();
+    loadSettings(); loadMorning(); loadExtras(); loadGates(); loadCapacity();
   }
 
   var saved = null;
