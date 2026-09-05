@@ -129,6 +129,10 @@ color:#fff;border:0;border-radius:7px}
     <input id="cap" class="big" inputmode="numeric">
     <label for="rsk">リスク率（%）</label>
     <input id="rsk" class="big" inputmode="decimal">
+    <label for="ntfy">通知トピック（ntfy.sh）</label>
+    <input id="ntfy" type="text" placeholder="例 gem-7f3a9c2e1b4d… 12文字以上・推測されない名前に" autocapitalize="off">
+    <p class="muted" style="margin:4px 0 0">iPhoneに ntfy アプリを入れ、同じトピックを購読すると、毎晩19:30の結果が届きます。
+      空にすると通知しません。トピック名を知っている人は誰でも読めるので、ランダムな名前にしてください。</p>
     <label for="rsn">変更の理由（任意・記録に残ります）</label>
     <input id="rsn" type="text" placeholder="入金 / 出金 / 見直し など">
     <button class="btn" id="csave">保存して判定を作り直す</button>
@@ -139,6 +143,10 @@ color:#fff;border:0;border-radius:7px}
 
     <h2>保有中の建玉</h2>
     <div id="posbox"></div>
+    <h2>決済済み：実約定価格の入力</h2>
+    <p class="muted">損切・利確は理論値で記録されています。証券口座の約定照会の値を入れると、スリッページが測れます。
+      バックテストでは平均損失が −1.00R → −1.15R になるだけで期待値が消えました。ここが最も測る価値のある数字です。</p>
+    <div id="slipbox"></div>
     <h2>判定下限までの進捗</h2>
     <div id="progbox"></div>
     <h2>暫定ルールの期限（§9-2）</h2>
@@ -560,6 +568,7 @@ color:#fff;border:0;border-radius:7px}
       var s = {}; (res[0] || []).forEach(function (r) { s[r.key] = r.value; });
       $("#cap").value = s.capital || "";
       $("#rsk").value = s.risk_rate ? (Number(s.risk_rate) * 100).toFixed(1) : "";
+      $("#ntfy").value = s.ntfy_topic || "";
       var lg = res[1] || [];
       $("#loglist").innerHTML = lg.length
         ? '<table class="num"><tr><th>日時</th><td>項目</td><td>変更</td></tr>'
@@ -583,6 +592,8 @@ color:#fff;border:0;border-radius:7px}
     var jobs = [api("/rest/v1/rpc/set_setting", "POST", { p_key: "capital", p_value: cap, p_reason: rsn })];
     if (rsk) { jobs.push(api("/rest/v1/rpc/set_setting", "POST",
       { p_key: "risk_rate", p_value: String(Number(rsk) / 100), p_reason: rsn })); }
+    jobs.push(api("/rest/v1/rpc/set_setting", "POST",
+      { p_key: "ntfy_topic", p_value: $("#ntfy").value.replace(/^\s+|\s+$/g, ""), p_reason: rsn }));
     Promise.all(jobs).then(function (rs) {
       b.disabled = false;
       var errs = rs.filter(function (d) { return d && d.error; });
@@ -705,24 +716,88 @@ color:#fff;border:0;border-radius:7px}
     return Promise.all([
       api("/rest/v1/v_positions?select=*"),
       api("/rest/v1/v_progress?select=*"),
-      api("/rest/v1/v_sunset?select=*")
+      api("/rest/v1/v_sunset?select=*"),
+      api("/rest/v1/v_settled_pending_actual?select=*"),
+      api("/rest/v1/v_slippage?select=*")
     ]).then(function (res) {
-      var ps = res[0] || [], pg = res[1] || [], sn = res[2] || [];
+      var ps = res[0] || [], pg = res[1] || [], sn = res[2] || [], pend = res[3] || [], slip = res[4] || [];
+
+      var sh = "";
+      if (pend.length) {
+        sh += pend.map(function (t) {
+          return '<div class="prop"><span class="lab">' + t.code + " " + t.name + "　" + t.exit_reason + "　" + t.exit_on + "</span>"
+            + '<span class="num">理論値 <b>' + yen(t.theoretical) + "</b></span>"
+            + '<input class="big" inputmode="decimal" placeholder="実約定" data-act="' + t.journal_id
+            + '" style="width:120px;font-size:16px;padding:8px">'
+            + '<span class="nums"><button class="pick" data-rec="' + t.journal_id + '">記録</button></span></div>';
+        }).join("");
+      } else {
+        sh += '<div class="muted">入力待ちの決済はありません。</div>';
+      }
+      if (slip.length) {
+        sh += '<table class="num" style="margin-top:12px"><tr><th>決済</th><td>件</td><td>記録</td><td>平均滑り</td><td>理論R</td><td>実R</td></tr>'
+          + slip.map(function (r) {
+              return "<tr><th>" + r.exit_reason + "</th><td>" + r.settled + "</td><td>" + r.recorded + "</td><td>"
+                + (r.avg_slip_yen == null ? "—" : (r.avg_slip_yen > 0 ? "+" : "") + r.avg_slip_yen + "円") + "</td><td>"
+                + (r.avg_r_theoretical == null ? "—" : Number(r.avg_r_theoretical).toFixed(2)) + "</td><td>"
+                + (r.avg_r_actual == null ? "—" : Number(r.avg_r_actual).toFixed(2)) + "</td></tr>";
+            }).join("") + "</table>";
+      }
+      $("#slipbox").innerHTML = sh;
+      Array.prototype.forEach.call($("#slipbox").querySelectorAll("[data-rec]"), function (b) {
+        b.onclick = function () {
+          var id = b.getAttribute("data-rec");
+          var v = $("#slipbox").querySelector('[data-act="' + id + '"]').value.replace(/[^0-9.]/g, "");
+          if (!v) { alert("実約定価格を入力してください"); return; }
+          api("/rest/v1/rpc/record_exit_actual", "POST", { p_journal_id: Number(id), p_price: Number(v) })
+            .then(function (r) {
+              if (r && r.error) { alert(r.error); return; }
+              alert(r.code + " " + r.exit_reason + "\n理論 " + yen(r.theoretical) + " → 実 " + yen(r.actual)
+                + "\n滑り " + (r.slippage_yen > 0 ? "+" : "") + yen(r.slippage_yen) + "円"
+                + "\n結果R " + r.result_r + " → " + r.result_r_actual);
+              loadExtras(); loadStats();
+            }).catch(function (e) { alert(e.message); });
+        };
+      });
       $("#posbox").innerHTML = ps.length
         ? ps.map(function (p) {
+            var dtc = p.days_to_close;
             return '<article class="row"><h3>' + p.code + "\u3000" + p.name + "</h3>"
               + '<div class="kv num">'
-              + "<div>約定日 / 経過</div><div>" + p["約定日"] + " / " + p["経過日数"] + "日</div>"
+              + "<div>約定日 / 経過</div><div>" + p.filled_on + " / " + p.days_held + "日</div>"
               + "<div>買値 → 現在値</div><div>" + yen(p.entry) + " → " + yen(p.last_close) + "</div>"
-              + "<div>含み損益</div><div>" + (p["含み損益"] > 0 ? "+" : "") + yen(p["含み損益"]) + " 円（"
-              + Number(p["含みR"]).toFixed(2) + "R）</div>"
+              + "<div>含み損益</div><div>" + (p.pnl_yen > 0 ? "+" : "") + yen(p.pnl_yen) + " 円（"
+              + Number(p.pnl_r).toFixed(2) + "R）</div>"
               + "<div>損切 / 利確</div><div>" + yen(p.stop_loss) + " / " + yen(p.take_profit) + "</div>"
-              + "<div>トレール候補</div><div>" + yen(p["トレール候補"]) + "</div></div>"
-              + (p["要塞化可能"] ? '<div class="note"><b>トレール候補が買値を上回っています。</b>'
-                  + "逆指値を " + yen(p["トレール候補"]) + " へ引き上げれば、最悪でもプラスで終わります（§3-2）。</div>" : "")
+              + "<div>トレール候補</div><div>" + yen(p.trail_candidate) + "</div>"
+              + "<div>決済注文の失効日</div><div>" + (p.sell_expires_on || "未登録") + "</div>"
+              + "<div>次の権利落ち日</div><div>" + (p.ex_date || "—") + "</div>"
+              + (p.close_by ? "<div>手仕舞い期限</div><div><b>" + p.close_by + "</b>（あと" + dtc + "日）</div>" : "")
+              + "</div>"
+              + (p.can_fortify ? '<div class="note"><b>トレール候補が買値を上回っています。</b>'
+                  + "逆指値を " + yen(p.trail_candidate) + " へ引き上げれば、最悪でもプラスで終わります（§3-2）。</div>" : "")
+              + (dtc != null && dtc <= 5 ? '<div class="note"><b>手仕舞い期限が' + dtc + '日後です。</b>'
+                  + "期限を過ぎると決済注文が失効し、権利落ちの下落に無防備になります。</div>" : "")
+              + (!p.sell_expires_on ? '<div class="note">決済注文の失効日が未登録です。楽天の注文照会で確認し、下の欄で登録してください。</div>' : "")
+              + '<div style="display:flex;gap:8px;margin-top:10px;align-items:center">'
+              + '<input type="date" data-exp="' + p.journal_id + '" style="flex:1;padding:9px;font:inherit;border:1px solid var(--rule);border-radius:7px">'
+              + '<button class="pick" data-setexp="' + p.journal_id + '">失効日を登録</button></div>'
               + "</article>";
           }).join("")
         : '<div class="empty">保有中の建玉はありません。</div>';
+      Array.prototype.forEach.call($("#posbox").querySelectorAll("[data-setexp]"), function (b) {
+        b.onclick = function () {
+          var id = b.getAttribute("data-setexp");
+          var d = $("#posbox").querySelector('[data-exp="' + id + '"]').value;
+          if (!d) { alert("日付を選んでください"); return; }
+          api("/rest/v1/rpc/set_sell_expiry", "POST", { p_journal_id: Number(id), p_expires: d })
+            .then(function (r) {
+              if (r && r.error) { alert(r.error); return; }
+              if (r.warning) { alert(r.warning); }
+              loadExtras();
+            }).catch(function (e) { alert(e.message); });
+        };
+      });
 
       $("#progbox").innerHTML = '<table class="num"><tr><th>項目</th><td>件数</td><td>下限</td><td>残り</td></tr>'
         + pg.map(function (r) {
